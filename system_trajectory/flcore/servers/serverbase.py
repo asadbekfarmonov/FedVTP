@@ -14,7 +14,8 @@ from utils.early_stopping import EarlyStopping
 import dill
 
 from utils.data_utils import read_client_data
-from utils.ngsim import ngsimDataset
+# from utils.ngsim import ngsimDataset
+from utils.highd import highdDataset
 
 
 class Server(object):
@@ -93,6 +94,18 @@ class Server(object):
         else:
             self.graph = False
 
+    def load_val_data_from_csv(self, dataset_name, site_id):
+        print(f"Loading validation data for {dataset_name}, site {site_id}")
+        root_path = os.path.join(dataset_name, "rawdata")
+        dataset = highdDataset(root_path=root_path, site_id=site_id, split="val")
+        return dataset
+
+    def load_data_from_csv(self, dataset_name, site_id):
+        print(f"Loading raw data for {dataset_name}, site {site_id}")
+        root_path = os.path.join(dataset_name, "rawdata")
+        dataset = highdDataset(root_path=root_path, site_id=site_id, split="train")
+        return dataset
+
     def set_clients(self, args, clientObj):
         for i, train_slow, send_slow in zip(range(self.num_clients), self.train_slow_clients, self.send_slow_clients):
             model_path = os.path.join("models", args.dataset)
@@ -103,17 +116,27 @@ class Server(object):
             #     dill.dump(train_data, f)
             # with open(model_path + '/' + str(i) + '_' + args.dataset + 'noise' + '_test_data.pkl', 'wb') as f:
             #     dill.dump(test_data, f)
-            with open(model_path + '/' + str(i) + '_' + args.dataset + '_train_data.pkl', 'rb') as f:
-                train_data = dill.load(f)
-            with open(model_path + '/' + str(i) + '_' + args.dataset + '_test_data.pkl', 'rb') as f:
-                test_data = dill.load(f)
+            try:
+                with open(model_path + '/' + str(i) + '_' + args.dataset + '_train_data.pkl', 'rb') as f:
+                    train_data = pickle.load(f)
+            except FileNotFoundError:
+                print(f"[INFO] Preprocessed data not found. Loading raw CSVs for site {i} ...")
+                train_data = self.load_data_from_csv(args.dataset, i)  # Replace with your actual loading logic
+
+            try:
+                with open(model_path + '/' + str(i) + '_' + args.dataset + '_test_data.pkl', 'rb') as f:
+                    val_data = pickle.load(f)
+            except FileNotFoundError:
+                print(f"[INFO] Preprocessed test data not found. Loading raw val CSVs for site {i} ...")
+                val_data = self.load_val_data_from_csv(args.dataset, i)
+
             print(len(train_data))
-            print(len(test_data))
+            print(len(val_data))
 
             client = clientObj(args,
                                id=i,
                                train_samples=train_data,
-                               test_samples=test_data,
+                               test_samples=val_data,
                                train_slow=train_slow,
                                send_slow=send_slow)
             self.clients.append(client)
@@ -141,31 +164,60 @@ class Server(object):
         return selected_clients
 
     def send_models(self):
-        assert (len(self.clients) > 0)
-
+        assert len(self.clients) > 0
+        print(f"[Server] Sending global model to {len(self.clients)} clients.")
         for client in self.clients:
             client.set_parameters(self.global_model)
 
     def receive_models(self):
-        assert (len(self.selected_clients) > 0)
+        assert len(self.selected_clients) > 0
+        print(f"[Server] Receiving models from {len(self.selected_clients)} clients...")
 
         self.uploaded_weights = []
         tot_samples = 0
         self.uploaded_ids = []
         self.uploaded_models = []
+
         for i, client in enumerate(self.selected_clients):
-            # self.uploaded_weights.append(len(client.train_samples) * self.clients_weight[i])
+            print(f"[Client {client.id}] Model received.")
             self.uploaded_weights.append(self.clients_weight[i])
             tot_samples += self.uploaded_weights[i]
             self.uploaded_ids.append(client.id)
             self.uploaded_models.append(client.model)
+
         for i, w in enumerate(self.uploaded_weights):
             self.uploaded_weights[i] = w / tot_samples
-        print(self.uploaded_ids)
-        print(self.uploaded_weights)
+
+        print("[Server] Normalized weights:")
+        for cid, w in zip(self.uploaded_ids, self.uploaded_weights):
+            print(f" - Client {cid}: weight = {w:.4f}")
+
+    def receive_models(self):
+        assert len(self.selected_clients) > 0
+        print(f"[Server] Receiving models from {len(self.selected_clients)} clients...")
+
+        self.uploaded_weights = []
+        tot_samples = 0
+        self.uploaded_ids = []
+        self.uploaded_models = []
+
+        for i, client in enumerate(self.selected_clients):
+            print(f"[Client {client.id}] Model received.")
+            self.uploaded_weights.append(self.clients_weight[i])
+            tot_samples += self.uploaded_weights[i]
+            self.uploaded_ids.append(client.id)
+            self.uploaded_models.append(client.model)
+
+        for i, w in enumerate(self.uploaded_weights):
+            self.uploaded_weights[i] = w / tot_samples
+
+        print("[Server] Normalized weights:")
+        for cid, w in zip(self.uploaded_ids, self.uploaded_weights):
+            print(f" - Client {cid}: weight = {w:.4f}")
 
     def aggregate_parameters(self):
-        assert (len(self.uploaded_models) > 0)
+        assert len(self.uploaded_models) > 0
+        print("[Server] Aggregating parameters...")
 
         self.global_model = copy.deepcopy(self.uploaded_models[0])
         for param in self.global_model.parameters():
@@ -173,9 +225,15 @@ class Server(object):
 
         for w, client_model in zip(self.uploaded_weights, self.uploaded_models):
             self.add_parameters(w, client_model)
+        print("[Server] Aggregation complete.")
 
     def add_parameters(self, w, client_model):
-        for server_param, client_param in zip(self.global_model.parameters(), client_model.parameters()):
+        print(f"[Server] Adding parameters with weight {w:.4f}")
+        for i, (server_param, client_param) in enumerate(
+                zip(self.global_model.parameters(), client_model.parameters())):
+            if server_param.shape != client_param.shape:
+                print(f"[WARN] Param shape mismatch at layer {i}: "
+                      f"server={server_param.shape}, client={client_param.shape}")
             server_param.data += client_param.data.clone() * w
 
     def set_parameters(self, new_model, old_model):
@@ -261,18 +319,10 @@ class Server(object):
 
     # evaluate selected clients
     def evaluate(self, rmse=None, es=True):
-
+        print("[Server] Starting evaluation...")
         stats = self.test_metrics()
-        # stats_train = self.train_metrics()
-        for i, t in enumerate(stats[2]):
-            print("Client" + str(i) + " Test RMSE: " + str(t))
-        # for i, t in enumerate(stats_train[2]):
-        #     print("Client" + str(i) + " Train loss: " + str(t))
-        test_rmse = 0
-        test_mae = 0
-        test_mape = 0
-        val_rmse = 0
-        test_loss = 0
+        test_rmse, test_mae, test_mape, val_rmse, test_loss = 0, 0, 0, 0, 0
+
         for a, n in zip(stats[2], stats[1]):
             test_rmse += a * n
         for a, n in zip(stats[3], stats[1]):
@@ -283,32 +333,30 @@ class Server(object):
             val_rmse += a * n
         for a, n in zip(stats[5], stats[1]):
             test_loss += a * n
-        test_rmse = test_rmse / sum(stats[1])
-        test_mae = test_mae / sum(stats[1])
-        test_mape = test_mape / sum(stats[1])
-        val_rmse = val_rmse / sum(stats[1])
-        test_loss = test_loss / sum(stats[1])
-        # if rmse == None:
-        #     self.rs_test_rmse.append(test_rmse)
-        # else:
-        #     rmse.append(test_rmse)
-        # print("Averaged Train Loss: {:.4f}".format(train_loss))
-        print("Averaged Val RMSE: {:.4f}".format(val_rmse))
-        # print("Averaged Test Loss: {:.4f}".format(test_loss))
-        print("Averaged Test RMSE: {:.4f}".format(test_rmse))
-        print("Averaged Test MAE: {:.4f}".format(test_mae))
-        print("Averaged Test MAPE: {:.4f}".format(test_mape))
-        # print("Cilent Test loss: {:.4f}".format(stats[5][0]))
-        # print("Cilent Test loss: {:.4f}".format(stats[5][1]))
-        self.val_rmse.append(40 if val_rmse > 40 else val_rmse)
-        self.test_rmse.append(40 if test_rmse > 40 else test_rmse)
-        self.test_mae.append(30 if test_mae > 30 else test_mae)
-        self.test_mape.append(50 if test_mape > 50 else test_mape)
+
+        total_samples = sum(stats[1])
+        test_rmse /= total_samples
+        test_mae /= total_samples
+        test_mape /= total_samples
+        val_rmse /= total_samples
+        test_loss /= total_samples
+
+        print(f"[Eval] Averaged Val RMSE:  {val_rmse:.4f}")
+        print(f"[Eval] Averaged Test RMSE: {test_rmse:.4f}")
+        print(f"[Eval] Averaged Test MAE:  {test_mae:.4f}")
+        print(f"[Eval] Averaged Test MAPE: {test_mape:.4f}")
+
+        self.val_rmse.append(min(val_rmse, 40))
+        self.test_rmse.append(min(test_rmse, 40))
+        self.test_mae.append(min(test_mae, 30))
+        self.test_mape.append(min(test_mape, 50))
+
         if es:
             self.early_stopping(val_rmse, self.global_model, "rmse")
-        # 达到早停止条件时，early_stop会被置为True
+            if self.early_stopping.early_stop:
+                print("[Server] Early stopping triggered!")
+
         return stats[5], stats[1], test_loss, test_rmse, self.early_stopping.early_stop
-        # return 1
 
     def check_done(self, acc_lss, top_cnt=None, div_value=None):
         for acc_ls in acc_lss:

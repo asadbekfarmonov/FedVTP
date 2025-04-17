@@ -9,9 +9,12 @@ def rmse(predAll, targetAll, count_):
     counts = 0
     lossVal = 0
     for s in range(All):
-        pred = np.swapaxes(predAll[s][:, :count_[s], :], 0, 1)
-        target = np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1)
-    #     pred = torch.from_numpy(np.swapaxes(predAll[s][:, :count_[s], :], 0, 1))
+        # print(f"[rmse] Sample {s}: pred.shape={predAll[s].shape}, count={count_[s]}")
+        pred_len = predAll[s].shape[1]
+        count = min(count_[s], pred_len)
+        pred = np.swapaxes(predAll[s][:, :count, :], 0, 1)
+        target = np.swapaxes(targetAll[s][:, :count, :], 0, 1)
+        #     pred = torch.from_numpy(np.swapaxes(predAll[s][:, :count_[s], :], 0, 1))
     #     target = torch.from_numpy(np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1))
     #     muX = pred[:, :, 0]
     #     muY = pred[:, :, 1]
@@ -25,8 +28,9 @@ def rmse(predAll, targetAll, count_):
         T = pred.shape[1]
         cnt = N * T
         sum_ = 0
+        # print(f"[rmse] Sample {s}: pred.shape={predAll[s].shape}, count={count_[s]}")
         for i in range(N):
-            for t in range(T):
+            for t in range(min(pred.shape[1], target.shape[1])):
                 sum_vec = (pred[i, t, 0] - target[i, t, 0]) ** 2 + (pred[i, t, 1] - target[i, t, 1]) ** 2
                 sum_ += sum_vec
         sum_all += sum_ / (cnt)
@@ -39,8 +43,10 @@ def old_rmse(predAll, targetAll, count_):
     All = len(predAll)
     sum_all = 0
     for s in range(All):
-        pred = np.swapaxes(predAll[s][:, :count_[s], :], 0, 1)
-        target = np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1)
+        pred_len = predAll[s].shape[1]
+        count = min(count_[s], pred_len)
+        pred = np.swapaxes(predAll[s][:, :count, :], 0, 1)
+        target = np.swapaxes(targetAll[s][:, :count, :], 0, 1)
 
         N = pred.shape[0]
         T = pred.shape[1]
@@ -52,46 +58,52 @@ def old_rmse(predAll, targetAll, count_):
 
     return math.sqrt(sum_all / All) * 0.3048  # Calculate RMSE and convert from feet to meters
 
-def fde(predAll, targetAll, count_):
-    All = len(predAll)
-    sum_all = 0
-    counts = 0
-    lossVal = 0
-    for s in range(All):
-        pred = np.swapaxes(predAll[s][:, :count_[s], :], 0, 1)
-        target = np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1)
-    #     pred = torch.from_numpy(np.swapaxes(predAll[s][:, :count_[s], :], 0, 1))
-    #     target = torch.from_numpy(np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1))
-    #     muX = pred[:, :, 0]
-    #     muY = pred[:, :, 1]
-    #     x = target[:, :, 0]
-    #     y = target[:, :, 1]
-    #     out = torch.pow(x - muX, 2) + torch.pow(y - muY, 2)
-    #     lossVal = torch.sum(out, dim=1)
-    #     counts = torch.numel(out)
-    # return lossVal, counts
-        N = pred.shape[0]
-        T = pred.shape[1]
-        cnt = N * T
-        sum_ = 0
-        for i in range(N):
-            for t in range(T-5, T):
-                sum_vec = (pred[i, t, 0] - target[i, t, 0]) ** 2 + (pred[i, t, 1] - target[i, t, 1]) ** 2
-                sum_ += sum_vec
-        sum_all += sum_ / (cnt)
-        lossVal += sum_
-        counts += N * T
-    # return lossVal, counts
-    return math.sqrt(sum_all / All) * 0.3048  # Calculate RMSE and convert from feet to meters
+# def fde(predAll, targetAll, count_):
+#     All = len(predAll)
+#     sum_all = 0
+#     counts = 0
+#     lossVal = 0
+#     for s in range(All):
+#         pred_len = predAll[s].shape[1]
+#         count = min(count_[s], pred_len)
+#         pred = np.swapaxes(predAll[s][:, :count, :], 0, 1)
+#         target = np.swapaxes(targetAll[s][:, :count, :], 0, 1)
+#
+#         #     pred = torch.from_numpy(np.swapaxes(predAll[s][:, :count_[s], :], 0, 1))
+#     #     target = torch.from_numpy(np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1))
+#     #     muX = pred[:, :, 0]
+#     #     muY = pred[:, :, 1]
+#     #     x = target[:, :, 0]
+#     #     y = target[:, :, 1]
+#     #     out = torch.pow(x - muX, 2) + torch.pow(y - muY, 2)
+#     #     lossVal = torch.sum(out, dim=1)
+#     #     counts = torch.numel(out)
+#     # return lossVal, counts
+#         N = pred.shape[0]
+#         T = min(pred.shape[1], target.shape[1])
+#         cnt = N * T
+#         sum_ = 0
+#         for i in range(N):
+#             for t in range(T-5, T):
+#                 sum_vec = (pred[i, t, 0] - target[i, t, 0]) ** 2 + (pred[i, t, 1] - target[i, t, 1]) ** 2
+#                 sum_ += sum_vec
+#         sum_all += sum_ / (cnt)
+#         lossVal += sum_
+#         counts += N * T
+#     # return lossVal, counts
+#     return math.sqrt(sum_all / All) * 0.3048  # Calculate RMSE and convert from feet to meters
 
 def mae(predAll, targetAll, count_):
     All = len(predAll)
     sum_all = 0
     for s in range(All):
-        pred = np.swapaxes(predAll[s][:, :count_[s], :], 0, 1)
-        target = np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1)
+        pred_len = predAll[s].shape[1]
+        count = min(count_[s], pred_len)
+        pred = np.swapaxes(predAll[s][:, :count, :], 0, 1)
+        target = np.swapaxes(targetAll[s][:, :count, :], 0, 1)
+
         N = pred.shape[0]
-        T = pred.shape[1]
+        T = min(pred.shape[1], target.shape[1])
         sum_ = 0
         for i in range(N):
             for t in range(T):
@@ -104,15 +116,18 @@ def mape(predAll, targetAll, count_):
     All = len(predAll)
     sum_all = 0
     for s in range(All):
-        pred = np.swapaxes(predAll[s][:, :count_[s], :], 0, 1)
-        target = np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1)
+        pred_len = predAll[s].shape[1]
+        count = min(count_[s], pred_len)
+        pred = np.swapaxes(predAll[s][:, :count, :], 0, 1)
+        target = np.swapaxes(targetAll[s][:, :count, :], 0, 1)
 
         N = pred.shape[0]
-        T = pred.shape[1]
+        T = min(pred.shape[1], target.shape[1])
         sum_ = 0
         for i in range(N):
             for t in range(T):
-                sum_ += np.abs((pred[i, t, 0] - target[i, t, 0]) / target[i, t, 0]) + np.abs((pred[i, t, 1] - target[i, t, 1]) / target[i, t, 1])
+                eps = 1e-5
+                sum_ += np.abs((pred[i, t, 0] - target[i, t, 0]) / target[i, t, 0] + eps) + np.abs((pred[i, t, 1] - target[i, t, 1]) / target[i, t, 1])
         sum_all += sum_ / (N * T)
 
     return sum_all / All * 100
@@ -121,10 +136,13 @@ def mhd(predAll, targetAll, count_):
     All = len(predAll)
     sum_all = 0
     for s in range(All):
-        pred = np.swapaxes(predAll[s][:, :count_[s], :], 0, 1)
-        target = np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1)
+        pred_len = predAll[s].shape[1]
+        count = min(count_[s], pred_len)
+        pred = np.swapaxes(predAll[s][:, :count, :], 0, 1)
+        target = np.swapaxes(targetAll[s][:, :count, :], 0, 1)
+
         N = pred.shape[0]
-        T = pred.shape[1]
+        T = min(pred.shape[1], target.shape[1])
         mhd_sum_ = 0
         for i in range(N):
             for t in range(T):
@@ -142,11 +160,13 @@ def ade(predAll, targetAll, count_):
     All = len(predAll)
     sum_all = 0
     for s in range(All):
-        pred = np.swapaxes(predAll[s][:, :count_[s], :], 0, 1)
-        target = np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1)
+        pred_len = predAll[s].shape[1]
+        count = min(count_[s], pred_len)
+        pred = np.swapaxes(predAll[s][:, :count, :], 0, 1)
+        target = np.swapaxes(targetAll[s][:, :count, :], 0, 1)
 
         N = pred.shape[0]
-        T = pred.shape[1]
+        T = min(pred.shape[1], target.shape[1])
         sum_ = 0
         for i in range(N):
             for t in range(T):
@@ -160,10 +180,13 @@ def fde(predAll, targetAll, count_):
     All = len(predAll)
     sum_all = 0
     for s in range(All):
-        pred = np.swapaxes(predAll[s][:, :count_[s], :], 0, 1)
-        target = np.swapaxes(targetAll[s][:, :count_[s], :], 0, 1)
+        pred_len = predAll[s].shape[1]
+        count = min(count_[s], pred_len)
+        pred = np.swapaxes(predAll[s][:, :count, :], 0, 1)
+        target = np.swapaxes(targetAll[s][:, :count, :], 0, 1)
+
         N = pred.shape[0]
-        T = pred.shape[1]
+        T = min(pred.shape[1], target.shape[1])
         sum_ = 0
         for i in range(N):
             for t in range(T - 1, T):

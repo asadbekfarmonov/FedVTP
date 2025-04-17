@@ -8,158 +8,167 @@ from threading import Thread
 import pickle
 import os
 from statistics import mean
+from utils.minio_utils import upload_model
 
 
 class FedAvg(Server):
     def __init__(self, args, times):
         super().__init__(args, times)
 
-        # select slow clients
+        # Select slow clients
         self.set_slow_clients()
         self.set_clients(args, clientAVG)
+
         self.epoch = 0
         self.dataset = args.dataset
-        total_sample = 0
-        for client in self.clients:
-            total_sample += len(client.train_samples)
+        self.Budget = []
+
+        total_sample = sum(len(client.train_samples) for client in self.clients)
         if args.weight1 == 5 and args.weight2 == 5:
             for client in self.clients:
-                self.clients_weight.append(len(client.train_samples)/total_sample)
+                self.clients_weight.append(len(client.train_samples) / total_sample)
         else:
             self.clients_weight.append(args.weight1)
             self.clients_weight.append(args.weight2)
 
-
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
-
-        # self.load_model()
-        self.Budget = []
 
     def train(self):
         earlystopping = False
         self.selected_clients = self.clients
+
         for i in range(self.global_rounds + 1):
+            print(f"\n{'=' * 10} [ROUND {i}] START {'=' * 10}")
             s_t = time.time()
+
+            # Send global model to clients
+            print(f"[LOG] Sending global model to all clients.")
             self.send_models()
+
+            print(f"[LOG] Running initial evaluation before local training...")
             next_state_a, _, loss, rmse, earlystopping = self.evaluate()
+
+            # Train clients
             for j, client in enumerate(self.selected_clients):
+                print(f"\n[LOG] Client {client.id} starts training.")
                 client.train(self.epoch)
-            print(f"\n-------------Round number: {i}-------------")
-            print("\nEvaluate personal model")
+
+            print(f"\n------------- Round {i} -------------")
+            print("\n[LOG] Evaluate personal model after training.")
             next_state_a, _, loss, rmse, earlystopping = self.evaluate()
-            self.states_lst.append([0.1 if value > 0.1 else value for value in next_state_a])
+
+            # Save client state info
+            filtered_state = [0.1 if value > 0.1 else value for value in next_state_a]
+            self.states_lst.append(filtered_state)
+            print(f"[LOG] Client state values (clipped): {filtered_state}")
+
+            # Collect uploaded models
+            print("[LOG] Receiving client models...")
             self.receive_models()
 
+            # Aggregate weights
+            print("[LOG] Aggregating models into global model.")
             self.aggregate_parameters()
+
             self.Budget.append(time.time() - s_t)
+            print(f"[ROUND {i}] Duration: {self.Budget[-1]:.2f}s")
+
             self.epoch = i
-            print('-' * 25, 'time cost', '-' * 25, self.Budget[-1])
             if earlystopping:
+                print("[LOG] Early stopping triggered.")
                 break
 
-        print("\nAverage time cost per round.")
-        print(sum(self.Budget[1:]) / len(self.Budget[1:]))
-        print("Best metrics:")
+        print("\n=== Training Completed ===")
+        avg_time = sum(self.Budget[1:]) / len(self.Budget[1:]) if len(self.Budget) > 1 else 0
+        print(f"\n[LOG] Average time per round: {avg_time:.2f}s")
+
+        # Best epoch and metrics
         min_value = min(self.val_rmse)
-        print("Val RMSE")
-        print(min_value)
-        print("Epochs")
         min_index = self.val_rmse.index(min_value)
-        print(min_index / 2)
-        print("Test RMSE")
-        print(self.test_rmse[min_index])
-        print("Test ADE")
-        print(self.test_mae[min_index])
-        print("Test FDE")
-        print(self.test_mape[min_index])
-        print("Best metrics in each client:")
-        best_rmse = []
-        best_mae = []
-        best_mape = []
-        weight = []
+        print(f"\n[LOG] Best Epoch: {min_index / 2:.1f}")
+        print(f"[LOG] Best Val RMSE: {min_value:.4f}")
+        print(f"[LOG] Corresponding Test RMSE: {self.test_rmse[min_index]:.4f}")
+        print(f"[LOG] Test ADE: {self.test_mae[min_index]:.4f}")
+        print(f"[LOG] Test FDE: {self.test_mape[min_index]:.4f}")
+
+        print("\n[LOG] Best client metrics:")
+        best_rmse, best_mae, best_mape, weight = [], [], [], []
         for i, client in enumerate(self.clients):
             weight.append(len(client.train_samples))
-            min_value = min(client.val_rmse)
-            print("Client" + str(i) + "  Val RMSE")
-            print(min_value)
-            min_index = client.val_rmse.index(min_value)
-            print("Epochs")
-            print(min_index)
-            print("Client " + str(i) + " Test RMSE")
-            print(client.test_rmse[min_index])
-            best_rmse.append(client.test_rmse[min_index])
-            print("Client " + str(i) + "Test ADE")
-            print(client.test_mae[min_index])
-            best_mae.append(client.test_mae[min_index])
-            print("Client " + str(i) + "Test FDE")
-            print(client.test_mape[min_index])
-            best_mape.append(client.test_mape[min_index])
-        print("Best metrics totally:")
-        print("Best RMSE")
-        print(sum([x * y for x, y in zip(best_rmse, weight)]) / sum(weight))
-        print("Best ADE")
-        print(sum([x * y for x, y in zip(best_mae, weight)]) / sum(weight))
-        print("Best FDE")
-        print(sum([x * y for x, y in zip(best_mape, weight)]) / sum(weight))
+            min_val_rmse = min(client.val_rmse)
+            min_index = client.val_rmse.index(min_val_rmse)
 
-        for i, client in enumerate(self.clients):  # todo 画图
-            fig, bx = plt.subplots()
-            print(client.test_rmse)
-            bx.plot(client.test_rmse, label='test RMSE')
-            bx.set_xlabel('Epoch')
-            bx.set_ylabel('RMSE')
-            bx.set_title('test RMSE vs Epoch')
-            bx.legend()
-            self.save_figure(fig, 'client_rmse', i)
+            print(f" - Client {i}:")
+            print(f"   - Val RMSE: {min_val_rmse:.4f}")
+            print(f"   - Epoch: {min_index}")
+            print(f"   - Test RMSE: {client.test_rmse[min_index]:.4f}")
+            print(f"   - Test ADE: {client.test_mae[min_index]:.4f}")
+            print(f"   - Test FDE: {client.test_mape[min_index]:.4f}")
+
+            best_rmse.append(client.test_rmse[min_index])
+            best_mae.append(client.test_mae[min_index])
+            best_mape.append(client.test_mape[min_index])
+
+        print("\n[LOG] Aggregated Best Metrics (Weighted):")
+        print(" - RMSE:", sum([x * y for x, y in zip(best_rmse, weight)]) / sum(weight))
+        print(" - ADE :", sum([x * y for x, y in zip(best_mae, weight)]) / sum(weight))
+        print(" - FDE :", sum([x * y for x, y in zip(best_mape, weight)]) / sum(weight))
+
+        # Plot and save visualizations
         for i, client in enumerate(self.clients):
             fig, bx = plt.subplots()
-            print(client.val_loss)
-            bx.plot(client.val_loss, label='test loss')
+            bx.plot(client.test_rmse, label='test RMSE')
+            bx.set_title(f"Client {i} Test RMSE vs Epoch")
             bx.set_xlabel('Epoch')
-            bx.set_ylabel('loss')
-            bx.set_title('test loss vs Epoch')
+            bx.set_ylabel('RMSE')
+            bx.legend()
+            self.save_figure(fig, 'client_rmse', i)
+
+        for i, client in enumerate(self.clients):
+            fig, bx = plt.subplots()
+            bx.plot(client.val_loss, label='validation loss')
+            bx.set_title(f"Client {i} Val Loss vs Epoch")
+            bx.set_xlabel('Epoch')
+            bx.set_ylabel('Loss')
             bx.legend()
             self.save_figure(fig, 'client_loss', i)
 
-        color_box = ['r', 'b', 'g', 'c', 'y', 'k']
+        # Server-level RMSE plot
         fig, bx = plt.subplots()
-        print(self.test_rmse)
-        bx.plot(self.test_rmse, label='val RMSE')
+        bx.plot(self.test_rmse, label='Server Test RMSE', color='g')
+        bx.set_title("Server Test RMSE vs Epoch")
         bx.set_xlabel('Epoch')
         bx.set_ylabel('RMSE')
-        bx.set_title('val RMSE vs Epoch')
         bx.legend()
         self.save_figure(fig, 'server_rmse', 0)
 
+        # Plot client states over time
+        color_box = ['r', 'b', 'g', 'c', 'y', 'k']
         fig, ax = plt.subplots()
         for i in range(self.num_clients):
-            state1_lst = []
-            for row in self.states_lst:
-                state1_lst.append(row[i])
-            # print(state1_lst)
-            ax.plot(state1_lst, color_box[i], label='client' + str(i))
-        ax.set_title('loss vs Epoch')
+            state1_lst = [row[i] for row in self.states_lst]
+            ax.plot(state1_lst, color=color_box[i], label=f'Client {i}')
+        ax.set_title("Client Loss State vs Epoch")
         ax.set_xlabel('Epoch')
-        ax.set_ylabel('loss')
+        ax.set_ylabel('Loss')
         ax.legend()
         self.save_figure(fig, 'loss', -1)
 
-        rmse_lst = []
-        for i, client in enumerate(self.clients):
-            rmse_lst.append(client.test_rmse)
+        # Plot RMSE comparisons
+        rmse_lst = [client.test_rmse for client in self.clients]
         fig, ax = plt.subplots()
         for i in range(self.num_clients):
-            ax.plot(rmse_lst[i], color_box[i], label='client' + str(i))
-        ax.plot(self.val_rmse, 'g', label='server')
-        ax.set_title('rmse vs Epoch')
+            ax.plot(rmse_lst[i], color=color_box[i], label=f'Client {i}')
+        ax.plot(self.val_rmse, 'g', label='Server')
+        ax.set_title('RMSE vs Epoch')
         ax.set_xlabel('Epoch')
-        ax.set_ylabel('rmse')
+        ax.set_ylabel('RMSE')
         ax.legend()
         self.save_figure(fig, 'rmse', -1)
 
+        # Save output
         save_data = {
-            # 'Average time cost per round': sum(self.Budget[1:])/len(self.Budget[1:]),
             'Best metrics': {
                 'Val RMSE': min_value,
                 'Epochs': min_index,
@@ -168,22 +177,29 @@ class FedAvg(Server):
                 'Test MAPE': self.test_mape[min_index]
             }
         }
-        save_data2 = []
-        for i, client in enumerate(self.clients):
-            tmp = {
-                'client.val_rmse': client.val_rmse,
-                'client.val_loss': client.val_loss,
-                # 'client.train_loss': client.train_loss
-            }
-            save_data2.append(tmp)
-        save_data3 = {
-            'val_rmse': self.val_rmse,
-        }
+        save_data2 = [{'client.val_rmse': client.val_rmse, 'client.val_loss': client.val_loss}
+                      for client in self.clients]
+        save_data3 = {'val_rmse': self.val_rmse}
+
         result_path = os.path.join(self.model_path, 'output.pkl')
-        # 将数据序列化并写入文件
         with open(result_path, 'wb') as f:
             pickle.dump(save_data, f)
             pickle.dump(save_data2, f)
             pickle.dump(save_data3, f)
+
+        # Upload final model to MinIO
+        final_model_path = os.path.join(self.model_path, self.algorithm + "_bestmodel.pth")
+        if os.path.exists(final_model_path):
+            try:
+                upload_model(
+                    file_path=final_model_path,
+                    bucket_name='fedvtp-models',
+                    object_name='global_model_latest.pth'
+                )
+                print("[MinIO] ✅ Uploaded global model to MinIO: global_model_latest.pth")
+            except Exception as e:
+                print(f"[MinIO] ❌ Failed to upload model to MinIO: {e}")
+        else:
+            print(f"[MinIO] ⚠️ Model file not found: {final_model_path}")
 
         return self.epoch

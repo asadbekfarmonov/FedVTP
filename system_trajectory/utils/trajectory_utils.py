@@ -253,9 +253,15 @@ class TrajectoryDataset(Dataset):
 
             start, end = self.seq_start_end[ss]
 
-            v_,a_ = seq_to_graph(self.obs_traj[start:end,:],self.obs_traj_rel[start:end, :],self.norm_lap_matr)
+            v_, a_ = seq_to_graph(self.obs_traj[start:end, :], self.obs_traj_rel[start:end, :], self.norm_lap_matr)
             self.v_obs.append(v_.clone())
-            self.A_obs.append(a_.clone())
+
+            # Static A: take average or first frame
+            static_A = a_[0]  # shape: (V, V)
+            kernel_size = 3  # or pass dynamically
+            A_packed = static_A.unsqueeze(0).repeat(kernel_size, 1, 1)
+            self.A_obs.append(A_packed.clone())  # shape: (K, V, V)
+
             v_,a_=seq_to_graph(self.pred_traj[start:end,:],self.pred_traj_rel[start:end, :],self.norm_lap_matr)
             self.v_pred.append(v_.clone())
             self.A_pred.append(a_.clone())
@@ -275,4 +281,10 @@ class TrajectoryDataset(Dataset):
             self.v_pred[index], self.A_pred[index]
 
         ]
+        # Dimension assertions for debugging
+        assert self.obs_traj[start:end, :].dim() == 3, f"obs_traj bad shape: {self.obs_traj[start:end, :].shape}"
+        assert self.pred_traj[start:end, :].dim() == 3, f"pred_traj bad shape: {self.pred_traj[start:end, :].shape}"
+        assert self.v_obs[index].dim() == 3, f"v_obs bad shape: {self.v_obs[index].shape}"
+        assert self.A_obs[index].dim() == 3, f"A_obs bad shape: {self.A_obs[index].shape}"
+
         return out

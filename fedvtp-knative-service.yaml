@@ -1,0 +1,42 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: fedvtp
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "1"
+    spec:
+      timeoutSeconds: 600
+      containers:
+        - image: docker.io/farmonovasad/fedvtp:latest
+          name: fedvtp
+          imagePullPolicy: Always
+          command: [ "python", "system_trajectory/train.py" ]
+          args:
+            [
+              "-data", "HIGHD",
+              "-m", "stgcn",
+              "-go", "knative-run",
+              "-algo", "FedAvg",
+              "-nc", "2",
+              "-ls", "1",
+              "-jr", "1",
+              "-lbs", "16",
+              "-gr", "5",
+              "-dev", "cpu",
+              "--n_stgcnn", "4",
+              "--n_txpcnn", "5",
+              "--weight1", "1.0",
+              "--weight2", "0.5"
+            ]
+          readinessProbe:
+            exec:
+              command: ["true"]
+          resources:
+            limits:
+              memory: "2Gi"
+              cpu: "1"

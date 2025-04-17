@@ -45,7 +45,10 @@ def run(args):
         with torch.no_grad():
             for cnt, batch in enumerate(loader_test):
                 batch_count += 1
-                batch = [tensor.cuda() for tensor in batch]
+                if torch.cuda.is_available():
+                    batch = [tensor.cuda() if isinstance(tensor, torch.Tensor) else tensor for tensor in batch]
+                else:
+                    batch = [tensor.to(self.device) if isinstance(tensor, torch.Tensor) else tensor for tensor in batch]
                 obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel, non_linear_ped, \
                 loss_mask, V_obs, A_obs, V_tr, A_tr = batch
                 V_obs_tmp = V_obs.permute(0, 3, 1, 2)

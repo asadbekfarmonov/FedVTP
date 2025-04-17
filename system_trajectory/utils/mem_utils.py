@@ -176,15 +176,17 @@ class MemReporter():
                 total_numel, readable_size(total_mem),
             ))
 
-            if device != torch.device('cpu'):
+            if str(device).startswith("cuda"):
                 with torch.cuda.device(device):
                     memory_allocated = torch.cuda.memory_allocated()
                 print('The allocated memory on {}: {}'.format(
                     device, readable_size(memory_allocated),
                 ))
                 if memory_allocated != total_mem:
-                    print('Memory differs due to the matrix alignment or'
-                          ' invisible gradient buffer tensors')
+                    print('Memory differs due to matrix alignment or invisible gradient buffer tensors')
+            elif str(device).startswith("mps"):
+                # torch.mps doesn't expose full memory info like CUDA, so we print a basic message
+                print(f"[MPS] Memory reporting is not fully supported on device: {device}")
             print('-'*LEN)
 
     def report(self, verbose: bool = False, device: Optional[torch.device] = None) -> None:

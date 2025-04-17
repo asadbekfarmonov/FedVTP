@@ -1,0 +1,10 @@
+# Ignore raw data
+dataset/data/
+
+# Also ignore git repo and Python artifacts
+.idea/
+.git/
+__pycache__/
+*.pyc
+*.pyo
+.envd

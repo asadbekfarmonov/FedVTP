@@ -4,7 +4,7 @@ import numpy as np
 import time
 from flcore.clients.clientbase import Client
 from flcore.optimizers.fedoptimizer import FedadamOptimizer
-from utils.privacy import *
+# from utils.privacy import *
 from utils.trajectory_utils import *
 
 
@@ -46,7 +46,10 @@ class clientOPT(Client):
             for cnt, batch in enumerate(trainloader):
                 batch_count += 1
                 # Get data
-                batch = [tensor.cuda() for tensor in batch]
+                if torch.cuda.is_available():
+                    batch = [tensor.cuda() if isinstance(tensor, torch.Tensor) else tensor for tensor in batch]
+                else:
+                    batch = [tensor.to(self.device) if isinstance(tensor, torch.Tensor) else tensor for tensor in batch]
                 obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel, non_linear_ped, \
                 loss_mask, V_obs, A_obs, V_tr, A_tr = batch
                 self.optimizer.zero_grad(set_to_none=True)

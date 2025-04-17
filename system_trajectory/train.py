@@ -14,11 +14,12 @@ import torchvision
 from flcore.servers.serveravg_pure import FedAvg
 from flcore.servers.serverprox import FedProx
 from flcore.servers.serveropt import FedOPT
-from flcore.servers.serverlocal import Local
+# from flcore.servers.serverlocal import Local
 from flcore.servers.serverditto import Ditto
-
-
-from flcore.trainmodel.models import *
+# from utils.highd import *
+from utils.highd import highdDataset
+from utils.mem_utils import *
+# from flcore.trainmodel.models import *
 
 from flcore.trainmodel.stgcn import social_stgcnn
 # from flcore.trainmodel.resnet import resnet18 as resnet
@@ -38,9 +39,8 @@ def getModelSize(model):
         param_size += param.nelement() * param.element_size()
         param_sum += param.nelement()
     all_size = (param_size) / 1024 / 1024
-    print('模型总大小为：{:.3f}MB'.format(all_size))
-    print('模型参数量为：{:.3f}'.format(param_sum))
-
+    print('Total model size: {:.3f}MB'.format(all_size))
+    print('Total number of model parameters: {:.3f}'.format(param_sum))
 
 def run(args):
 
@@ -95,8 +95,7 @@ def run(args):
 
     # print("All done!")
 
-    reporter.report()
-
+    reporter.report(device=args.device)
 
 if __name__ == "__main__":
     total_start = time.time()
@@ -155,17 +154,29 @@ if __name__ == "__main__":
                         help="Number of personalized training steps for pFedMe")
     parser.add_argument('-lrp', "--p_learning_rate", type=float, default=0.01,
                         help="personalized learning rate to caculate theta aproximately using K steps")
+    parser.add_argument('--n_stgcnn', type=int, default=4, help='Number of ST-GCNN layers')
+    parser.add_argument('--n_txpcnn', type=int, default=5, help='Number of TPCNN layers')
+    parser.add_argument('--weight1', type=float, default=1.0, help='Loss weight 1 (e.g., position)')
+    parser.add_argument('--weight2', type=float, default=0.5, help='Loss weight 2 (e.g., velocity)')
+    parser.add_argument('--flag', type=str, default='default_run', help='Optional tag or run identifier')
+
     # Ditto / FedRep
     parser.add_argument('-pls', "--plocal_steps", type=int, default=1)
 
     args = parser.parse_args()
 
-    # os.environ["CUDA_VISIBLE_DEVICES"] = args.device_id
-    torch.cuda.set_device(int(args.device_id))
+    # Automatically select device: MPS (Apple Silicon GPU) > CUDA > CPU
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("✅ Using MPS (Metal Performance Shaders) backend on Apple Silicon.")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+        print("✅ Using CUDA (GPU) backend.")
+    else:
+        device = torch.device("cpu")
+        print("⚠️ MPS and CUDA not available, using CPU.")
 
-    if args.device == "cuda" and not torch.cuda.is_available():
-        print("\ncuda is not avaiable.\n")
-        args.device = "cpu"
+    args.device = device  # ✅ Now this works
 
     print("=" * 50)
     print(datetime.datetime.now())
