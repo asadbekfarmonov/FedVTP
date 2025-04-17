@@ -1,0 +1,57 @@
+# ======================
+# Python + Conda
+# ======================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+*.env
+*.venv
+*.conda
+*.lock
+
+# ======================
+# System & IDE
+# ======================
+.DS_Store
+.idea/
+.vscode/
+
+# ======================
+# Jupyter
+# ======================
+.ipynb_checkpoints/
+
+# ======================
+# Data & Datasets
+# ======================
+dataset/
+HIGHD/
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# ======================
+# Models & Artifacts
+# ======================
+models/
+saved_models/
+*.pth
+
+# ======================
+# Test Artifacts
+# ======================
+test_model.pth
+downloaded_test_model.pth
+
+# ======================
+# MinIO / mc Config
+# ======================
+.mc/
