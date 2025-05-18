@@ -1,0 +1,28 @@
+#service_client_0.yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: fedvtp-client-0
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "1"
+    spec:
+      containers:
+        - image: docker.io/farmonovasad/fedvtp-client:v5
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CLIENT_ID
+              value: "0"
+          command: ["python", "system_trajectory/run_client.py"]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5

@@ -1,0 +1,17 @@
+FROM continuumio/miniconda3
+
+WORKDIR /app
+ENV PYTHONPATH="/app"
+
+# Copy only requirements first
+COPY system_trajectory/requirements.txt .
+RUN conda install python=3.9 -y && \
+    pip install --no-cache-dir -r requirements.txt && \
+    conda clean -afy
+
+# Copy source code and data
+COPY system_trajectory/ ./system_trajectory
+COPY HIGHD ./highd
+
+EXPOSE 8080
+CMD ["python", "system_trajectory/run_client.py"]

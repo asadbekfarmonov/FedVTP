@@ -1,0 +1,6 @@
+#broker.yaml
+apiVersion: eventing.knative.dev/v1
+kind: Broker
+metadata:
+  name: fedvtp-broker
+  namespace: default

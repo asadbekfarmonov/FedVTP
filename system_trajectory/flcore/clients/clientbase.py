@@ -421,23 +421,29 @@ class Client(object):
     def save_item(self, item, item_name, item_path=None):
         if item_path is None:
             item_path = self.save_folder_name
+
+    # Ensure local directory exists
         if not os.path.exists(item_path):
             os.makedirs(item_path)
 
-        file_name = f"client_{self.id}_{item_name}.pt"
-        full_path = os.path.join(item_path, file_name)
-        torch.save(item, full_path)
+        filename = f"client_{self.id}_{item_name}.pt"
+        file_path = os.path.join(item_path, filename)
 
-        # ✅ Upload to MinIO
+    # Save model locally
+        torch.save(item, file_path)
+        print(f"[Client {self.id}] ✅ Model saved locally at {file_path}")
+
+    # Attempt MinIO upload
         try:
             upload_model(
-                file_path=full_path,
-                bucket_name="fedvtp-models",
-                object_name=f"clients/{file_name}"
+                file_path=file_path,
+                bucket_name='fedvtp-models',
+                object_name=f'clients/{filename}'
             )
-            print(f"[Client {self.id}] ✅ Uploaded {file_name} to MinIO")
+            print(f"[Client {self.id}] ☁️ Model uploaded to MinIO at clients/{filename}")
         except Exception as e:
             print(f"[Client {self.id}] ❌ Failed to upload to MinIO: {e}")
+
 
 
     def load_item(self, item_name, item_path=None):

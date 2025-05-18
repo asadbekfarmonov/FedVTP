@@ -130,8 +130,13 @@ class Server(object):
                 print(f"[INFO] Preprocessed test data not found. Loading raw val CSVs for site {i} ...")
                 val_data = self.load_val_data_from_csv(args.dataset, i)
 
-            print(len(train_data))
-            print(len(val_data))
+                
+            print("🧠 THIS IS THE NEW VERSION")
+            print(f"[DEBUG] len(train_data): {len(train_data)}")
+
+            print(f"[DEBUG] len(train_samples): {len(train_data)}")
+            print(f"[DEBUG] len(test_samples): {len(val_data)}")
+
 
             client = clientObj(args,
                                id=i,

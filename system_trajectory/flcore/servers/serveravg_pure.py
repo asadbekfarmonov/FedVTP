@@ -1,3 +1,4 @@
+#serveravg_pure.py
 import time
 import torch
 from flcore.clients.clientavg import clientAVG

@@ -1,0 +1,18 @@
+#trigger-server.yaml
+apiVersion: eventing.knative.dev/v1
+kind: Trigger
+metadata:
+  name: trigger-server
+  namespace: default
+spec:
+  broker: fedvtp-broker
+  filter:
+    attributes:
+      type: minio.object.created
+      subject: clients/
+  subscriber:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: fedvtp-server
+    uri: /aggregate

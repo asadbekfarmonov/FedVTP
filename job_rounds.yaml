@@ -1,0 +1,19 @@
+#job_rounds.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: run-federated-rounds
+spec:
+  template:
+    spec:
+      containers:
+      - name: federated-rounds
+        image: farmonovasad/fedvtp-rounds:v9
+        imagePullPolicy: Always
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: "72en2S9Xv7qjlnMkx6tj"
+        - name: MINIO_SECRET_KEY
+          value: "N5Xpj8P9ftRknAppLQtSwOXT9Wy9ZY2R4J3rMe2s"
+      restartPolicy: Never
+  backoffLimit: 0

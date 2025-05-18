@@ -27,7 +27,9 @@ __pycache__/
 # ======================
 # Data & Datasets
 # ======================
-dataset/
+dataset/data/raw/
+dataset/data/smooth/
+!dataset/*.py
 HIGHD/
 *.csv
 *.tsv
@@ -55,3 +57,4 @@ downloaded_test_model.pth
 # MinIO / mc Config
 # ======================
 .mc/
+.env

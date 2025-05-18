@@ -1,0 +1,36 @@
+#service_server.yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: fedvtp-server
+  namespace: default    
+spec:
+  template:
+    metadata:
+      annotations:
+        serving.knative.dev/timeoutSeconds: "600"
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "1"
+    spec:
+      containers:
+        - image: docker.io/farmonovasad/fedvtp-server:v3
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          command: ["python", "system_trajectory/run_server.py"]
+          args:
+            [
+              "--goal", "prod",
+              "--global_rounds", "5",
+              "--num_clients", "2",
+              "--join_ratio", "1.0",
+              "--device", "cpu",
+              "--dataset", "highd"
+            ]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+

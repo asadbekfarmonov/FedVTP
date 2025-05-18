@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# train.py
 import copy
 import datetime
 
@@ -214,8 +215,13 @@ if __name__ == "__main__":
         os.makedirs(model_path)
     args.model_path = model_path
     log_path = os.path.join(model_path, "log" + ".txt")
-    run(args)
-
+    try:
+        run(args)
+    except Exception as e:
+        print(f"\n[❌ ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+    
     print("=" * 50)
     print(datetime.datetime.now())
     print("Algorithm: {}".format(args.algorithm))
